@@ -60,8 +60,7 @@ void loop() {
     motorL.run(BACKWARD);
 
     while(optoValue == LOW) {   
-     optoValue = digitalRead(OPTO_PIN);
-    //  if(optoValue == HIGH) break;
+      optoValue = digitalRead(OPTO_PIN);
       
       Serial.println(optoValue);
       motorR.run(RELEASE);
