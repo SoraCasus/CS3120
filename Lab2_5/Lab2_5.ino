@@ -5,8 +5,8 @@
 #define LED_PIN 45
 #define OPTO_PIN 22
 
-#define LEFT_SPEED 75
-#define RIGHT_SPEED 75
+#define LEFT_SPEED 255
+#define RIGHT_SPEED 255
 
 AF_DCMotor motorR(1);
 AF_DCMotor motorL(2);
@@ -111,6 +111,9 @@ void loop() {
      
     _time += 2000;
   }
+
+  motorR.run(RELEASE);
+  motorL.run(RELEASE);
 
   while (1);
 }
