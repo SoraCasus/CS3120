@@ -48,7 +48,7 @@ void loop() {
 
   int i = 0;
 
-  while (millis() - timer < (5 * 1000)) {
+  while (millis() - timer < 5000) {
     i++;
     r = digitalRead(R_COUNTER);
     // Serial.println(r);
@@ -68,35 +68,35 @@ void loop() {
       lLast = l;
     }
 
-  
-
     if (lCounter > rCounter) {
       motorL.run(RELEASE);
+    } else if (rCounter > lCounter) {
+      motorR.run(RELEASE);
     } else {
+      motorR.run(FORWARD);
       motorL.run(FORWARD);
     }
-//    
-//    if (rCounter > lCounter) {
-//      motorR.run(RELEASE);
-//    } else {
-//      motorR.run(FORWARD);
-//    }
 
-    Serial.print(lCounter);
-    Serial.print("     ");
-    Serial.println(rCounter);
+    //    Serial.print(lCounter);
+    //    Serial.print("     ");
+    //    Serial.println(rCounter);
 
-    if(i % 10 == 0) {
+    if (i % 10 == 0) {
       dataPoints.add(analogRead(OPTO_PIN));
       i = 0;
     }
   }
 
+
+  Serial.println("STOPPING");
   motorL.run(BACKWARD);
   motorR.run(BACKWARD);
   delay(100);
   motorL.run(RELEASE);
   motorR.run(RELEASE);
+
+  motorR.setSpeed(1);
+  motorL.setSpeed(1);
 
   int listSize = dataPoints.size();
   for (int i = 0; i < listSize; i++) {
@@ -108,13 +108,17 @@ void loop() {
   }
 
   delay(1000);
-  Serial.println("Done");
+  // Serial.println("Done");
 
-  motorR.run(RELEASE);
-  motorL.run(RELEASE);
+  // motorR.run(RELEASE);
+  // motorL.run(RELEASE);
   CloseFile();
 
-  while (true);
+  while (true) {
+    // motorR.run(RELEASE);
+    // motorL.run(RELEASE);
+
+  }
 }
 
 void InitSD() {
@@ -128,12 +132,12 @@ void InitSD() {
 }
 
 void CreateFile(char* fileName) {
-  if(SD.exists(fileName)) {
+  if (SD.exists(fileName)) {
     SD.remove(fileName);
   }
-  
+
   file = SD.open(fileName, FILE_WRITE);
-  
+
   if (file) {
     Serial.println("File creation SUCCESS");
     return 1;

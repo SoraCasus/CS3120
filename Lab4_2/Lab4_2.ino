@@ -1,26 +1,33 @@
 #include <AFMotor.h>
 #include <LiquidCrystal_I2C.h>
+#include <SD.h>
+#include <SPI.h>
+#include <Servo.h>
 #include <math.h>
 
 #define PI_32 3.141592654
 #define BUTTON_WAIT() while(digitalRead(PUSH_BUTTON) == LOW)
 
+#define DRIVE(x) run( (x) ? FORWARD : BACKWARD)
+#define DRIVE_INV(x) run( (x) ? BACKWARD : FORWARD)
+
 #define PUSH_BUTTON 15
 #define POT_PIN A0
-#define OPTO_PIN 22
+#define OPTO_PIN A1
 #define L_COUNTER 24
 #define R_COUNTER 25
+#define CS_PIN 53
+#define PING_PIN 46
 
 #define DEBUG 1
 
 uint8_t motorSpeed = 150;
-
 uint32_t angles[] = {238, 481, 709, 942};
 
 AF_DCMotor motorR(1);
 AF_DCMotor motorL(2);
+Servo myServo;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-
 
 void setup() {
   // put your setup code here, to run once:
@@ -33,6 +40,7 @@ void setup() {
   pinMode(L_COUNTER, INPUT);
   pinMode(R_COUNTER, INPUT);
   pinMode(OPTO_PIN, INPUT);
+  myServo.attach(26);
 
   motorR.setSpeed(motorSpeed);
   motorL.setSpeed(motorSpeed);
@@ -46,9 +54,19 @@ void loop() {
   // put your main code here, to run repeatedly
 
   uint16_t selection = analogRead(POT_PIN);
-  selection = map(selection, 0, 800, 1, 7);
+  selection = map(selection, 0, 800, 1, 8);
 
   //Serial.println(selection);
+
+  //  for (int pos = 0; pos <= 180; pos += 1) { // goes from 0 degrees to 180 degrees
+  //    // in steps of 1 degree
+  //    myServo.write(pos);              // tell servo to go to position in variable 'pos'
+  //    delay(15);                       // waits 15ms for the servo to reach the position
+  //  }
+  //  for (int pos = 180; pos >= 0; pos -= 1) { // goes from 180 degrees to 0 degrees
+  //    myServo.write(pos);              // tell servo to go to position in variable 'pos'
+  //    delay(15);                       // waits 15ms for the servo to reach the position
+  //  }
 
   switch (selection) {
     case 1 : {
@@ -105,17 +123,28 @@ void loop() {
           lcd.setCursor(0, 0);
           lcd.print("Go to goal     <");
           lcd.setCursor(0, 1);
-          lcd.print("Rot Calibrate   ");
+          lcd.print("Read Floor      ");
         }
       } break;
 
     case 6 : {
         if (digitalRead(PUSH_BUTTON) == LOW) {
-          CalibrateRotation();
+          ReadFloor();
         } else {
 
           lcd.setCursor(0, 0);
-          lcd.print("Rot Calibrate  <");
+          lcd.print("Read Floor     <");
+          lcd.setCursor(0, 1);
+          lcd.print("Sonar           ");
+        }
+      } break;
+
+    case 7 : {
+        if (digitalRead(PUSH_BUTTON) == LOW) {
+          Sonar();
+        } else {
+          lcd.setCursor(0, 0);
+          lcd.print("Sonar          <");
           lcd.setCursor(0, 1);
           lcd.print("Exit            ");
         }
@@ -136,112 +165,148 @@ void loop() {
   delay(200);
 }
 
-void CalibrateRotation() {
-  uint32_t targetTicks = 3000;
+void Sonar() {
+  BUTTON_WAIT();
 
-  //for (int i = 0; i < 4; i++) {
-  uint32_t lTicks = 0;
-  uint32_t rTicks = 0;
+  // InitSD
+  pinMode(CS_PIN, OUTPUT);
+  SD.begin();
+
+  if (SD.exists("sonar.csv")) {
+    SD.remove("sonar.csv");
+  }
+
+  File file = SD.open("sonar.csv", FILE_WRITE);
+
+  // Get 3 Readings
+
+  for (int i = 0; i < 5; i++) {
+
+    file.print((i + 1) * 5);
+    file.print(",");
+    file.println(GetSonarReading());
+    delay(100);
+    file.print((i + 1) * 5);
+    file.print(",");
+    file.println(GetSonarReading());
+    delay(100);
+    file.print((i + 1) * 5);
+    file.print(",");
+    file.println(GetSonarReading());
+
+    DriveDistance(5, false);
+
+    delay(1000);
+
+  }
+
+  file.close();
+
+
+}
+
+/**
+    Gets the distance using the sonar in centimeters
+*/
+double GetSonarReading() {
+  pinMode(PING_PIN, OUTPUT);
+  digitalWrite(PING_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(PING_PIN, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(PING_PIN, LOW);
+
+  pinMode(PING_PIN, INPUT);
+  int64_t duration = pulseIn(PING_PIN, HIGH);
+
+  return ((double)duration / 29 / 2) - 11;
+}
+
+void ReadFloor() {
+
+  BUTTON_WAIT();
+
+  // InitSD
+  pinMode(CS_PIN, OUTPUT);
+  SD.begin();
+
+  if (SD.exists("data.csv")) {
+    SD.remove("data.csv");
+  }
+
+  File file = SD.open("data.csv", FILE_WRITE);
+  file.println("FLOOR_SENSOR");
+
+  uint16_t distance;
+
+  while (digitalRead(PUSH_BUTTON) != LOW) {
+    distance = analogRead(POT_PIN);
+    distance = map(distance, 0, 1000, 3, 7);        // its 3 - 7 ( not  3 - 5 )
+
+    lcd.setCursor(0, 0);
+    lcd.print("Set Time        ");
+    lcd.setCursor(0, 1);
+    lcd.print(distance);
+    lcd.print("  Seconds       ");
+
+  }
 
   bool r = LOW;
-  bool rLast = LOW;
   bool l = LOW;
+  bool rLast = LOW;
   bool lLast = LOW;
-
-  int index = 0;
-  bool optoLast = LOW;
-  bool opto = LOW;
-  
-
-  motorR.setSpeed(150);
+  //motorR.setSpeed(150);
+  //motorL.setSpeed(150);
   motorR.run(FORWARD);
-  motorL.setSpeed(150);
-  motorL.run(BACKWARD);
+  motorL.run(FORWARD);
 
-  int i = 0;
+  uint32_t lCounter = 0;
+  uint32_t rCounter = 0;
 
-  while (lTicks < targetTicks || rTicks < targetTicks) {
+  uint64_t timer = millis();
+
+  while (millis() - timer < (distance * 1000)) {
     r = digitalRead(R_COUNTER);
+    // Serial.println(r);
     l = digitalRead(L_COUNTER);
-
-//    lcd.setCursor(0, 0);
-//    lcd.print(lTicks);
-//    lcd.print("          ");
-//    lcd.setCursor(0, 1);
-//    lcd.print(rTicks);
-//    lcd.print("          ");
-
-    if (lTicks >= targetTicks) {
-      motorL.run(RELEASE);
-    }
-
-    if (rTicks >= targetTicks) {
-      motorR.run(RELEASE);
-    }
+    // Serial.println(l);
 
     if (r != rLast) {
-      if (r == HIGH) {
-        rTicks++;
+      if (r == HIGH)   {
+        rCounter++;
       }
       rLast = r;
     }
-
     if (l != lLast) {
       if (l == HIGH) {
-        lTicks++;
+        lCounter++;
       }
       lLast = l;
     }
 
-    if (lTicks > rTicks) {
+    if (lCounter > rCounter) {
       motorL.run(RELEASE);
-    } else {
-      motorL.run(BACKWARD);
-    }
-
-    if (rTicks > lTicks) {
+    } else if (rCounter > lCounter) {
       motorR.run(RELEASE);
     } else {
       motorR.run(FORWARD);
+      motorL.run(FORWARD);
     }
 
-    opto = digitalRead(OPTO_PIN);
-    Serial.println(opto);
-    if(opto != optoLast) {
-      if(opto == LOW) {
-        if(i++ < 10) continue;
-        angles[index++] = lTicks;
-        if(index > 3) break;
-      }
-      optoLast = opto;
+    if ((millis() - timer) % 10 == 0) {
+      // Log the value to file
+      uint16_t optoValue = analogRead(OPTO_PIN);
+      file.println(optoValue);
     }
-    
   }
 
-  long lastTime = millis();
-
-
-  while ((millis() - lastTime) < 200) {
-    motorR.run(BACKWARD);
-    motorL.run(FORWARD);
-  }
-
-
-  motorR.run(RELEASE);
+  motorL.run(BACKWARD);
+  motorR.run(BACKWARD);
+  delay(100);
   motorL.run(RELEASE);
+  motorR.run(RELEASE);
 
-  lastTime = millis();
-  while ((millis() - lastTime) < 1000);
-
-  Serial.print("90: ");
-  Serial.println(angles[0]);
-  Serial.print("180: ");
-  Serial.println(angles[1]);
-  Serial.print("270: ");
-  Serial.println(angles[2]);
-  Serial.print("360: ");
-  Serial.println(angles[3]);
-  
+  file.close();
 
 }
 
@@ -284,7 +349,7 @@ void GoToGoal() {
 
 
   TurnToAngle(angle);
-  DriveDistance(distance);
+  DriveDistance(distance, true);
 
 }
 
@@ -301,7 +366,7 @@ void GoToloc(uint16_t x, uint16_t y) {                    //////// once the requ
 
   delay(200);
 
-  DriveDistance(distance);
+  DriveDistance(distance, true);
 
 }
 
@@ -310,8 +375,15 @@ uint32_t AngleToTicks(uint16_t angle) {
   distance /= 360;
   double N = 1.04 + (5.56e-3 * angle) + (-1.11e-5 * angle * angle);
 
-   distance /= N;
+  distance /= N;
   distance *= 0.98;
+
+  if (angle > 180) {
+    distance *= 1.01;
+    if (angle < 270) {
+      distance *= 1.02;
+    }
+  }
 
   return GetDistance(distance);
 }
@@ -623,7 +695,7 @@ void TravelDistance() {
     }
   }
 
-  DriveDistance(distance);
+  DriveDistance(distance, true);
 
 }
 
@@ -635,7 +707,7 @@ void TravelDistance() {
 */
 uint32_t GetDistance(double distance) {
   if (distance <= 5) {
-    return distance * 12;
+    return distance * 13.5;
   }
   return (uint32_t)(-55.8 + (16.2 * distance));
 }
@@ -646,14 +718,14 @@ uint32_t GetDistance(double distance) {
 
     distance - The distance in centimeters
 */
-void DriveDistance(uint16_t distance) {
+void DriveDistance(uint16_t distance, bool fwd) {
   bool r = LOW;
   bool l = LOW;
   bool rLast = LOW;
   bool lLast = LOW;
 
-  motorR.run(FORWARD);
-  motorL.run(FORWARD);
+  motorR.DRIVE(fwd);
+  motorL.DRIVE(fwd);
 
   uint32_t target = GetDistance(distance);
   uint32_t lCounter = 0;
@@ -684,16 +756,20 @@ void DriveDistance(uint16_t distance) {
     } else if (rCounter > lCounter) {
       motorR.run(RELEASE);
     } else {
-      motorR.run(FORWARD);
-      motorL.run(FORWARD);
+      motorR.DRIVE(fwd);
+      motorL.DRIVE(fwd);
     }
   }
-
-  motorR.run(BACKWARD);
-  motorL.run(BACKWARD);
+  motorR.DRIVE_INV(fwd);
+  motorL.DRIVE_INV(fwd);
   long lastTime = millis();
-  while(millis() - lastTime < 200);
 
+  if (distance > 30) {
+    while (millis() - lastTime < 200);
+  } else {
+    while (millis() - lastTime < 50);
+
+  }
   motorR.run(RELEASE);
   motorL.run(RELEASE);
 }
