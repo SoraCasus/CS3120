@@ -1,52 +1,11 @@
-#include <AFMotor.h>
-#include <LiquidCrystal_I2C.h>
-#include <SD.h>
-#include <SPI.h>
-#include <Servo.h>
-#include <math.h>
-
-#define PI_32 3.141592654
-#define BUTTON_WAIT() while(digitalRead(PUSH_BUTTON) == LOW)
-
-#define DRIVE(x) run( (x) ? FORWARD : BACKWARD)
-#define DRIVE_INV(x) run( (x) ? BACKWARD : FORWARD)
-
-#define PUSH_BUTTON 15
-#define POT_PIN A0
-#define OPTO_PIN A1
-#define L_COUNTER 24
-#define R_COUNTER 25
-#define CS_PIN 53
-#define PING_PIN 46
+#include "Common.h"
 
 #define DEBUG 1
-
-uint8_t motorSpeed = 150;
-uint32_t angles[] = {238, 481, 709, 942};
-
-AF_DCMotor motorR(1);
-AF_DCMotor motorL(2);
-Servo myServo;
-LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 void setup() {
   // put your setup code here, to run once:
 
-  Serial.begin(115200);
-
-  lcd.init();
-  lcd.backlight();
-
-  pinMode(L_COUNTER, INPUT);
-  pinMode(R_COUNTER, INPUT);
-  pinMode(OPTO_PIN, INPUT);
-  myServo.attach(26);
-
-  motorR.setSpeed(motorSpeed);
-  motorL.setSpeed(motorSpeed);
-
-  motorR.run(RELEASE);
-  motorL.run(RELEASE);
+  CS3120::Init();
 
 }
 
@@ -169,7 +128,7 @@ void Sonar() {
   BUTTON_WAIT();
 
   // InitSD
-  pinMode(CS_PIN, OUTPUT);
+  pinMode(SPI_CS_PIN, OUTPUT);
   SD.begin();
 
   if (SD.exists("sonar.csv")) {
@@ -209,15 +168,15 @@ void Sonar() {
     Gets the distance using the sonar in centimeters
 */
 double GetSonarReading() {
-  pinMode(PING_PIN, OUTPUT);
-  digitalWrite(PING_PIN, LOW);
+  pinMode(SONAR_FRONT, OUTPUT);
+  digitalWrite(SONAR_FRONT, LOW);
   delayMicroseconds(2);
-  digitalWrite(PING_PIN, HIGH);
+  digitalWrite(SONAR_FRONT, HIGH);
   delayMicroseconds(5);
-  digitalWrite(PING_PIN, LOW);
+  digitalWrite(SONAR_FRONT, LOW);
 
-  pinMode(PING_PIN, INPUT);
-  int64_t duration = pulseIn(PING_PIN, HIGH);
+  pinMode(SONAR_FRONT, INPUT);
+  int64_t duration = pulseIn(SONAR_FRONT, HIGH);
 
   return ((double)duration / 29 / 2) - 11;
 }
@@ -227,7 +186,6 @@ void ReadFloor() {
   BUTTON_WAIT();
 
   // InitSD
-  pinMode(CS_PIN, OUTPUT);
   SD.begin();
 
   if (SD.exists("data.csv")) {
@@ -266,9 +224,9 @@ void ReadFloor() {
   uint64_t timer = millis();
 
   while (millis() - timer < (distance * 1000)) {
-    r = digitalRead(R_COUNTER);
+    r = digitalRead(R_ENCODER_1);
     // Serial.println(r);
-    l = digitalRead(L_COUNTER);
+    l = digitalRead(L_ENCODER_1);
     // Serial.println(l);
 
     if (r != rLast) {
@@ -295,7 +253,7 @@ void ReadFloor() {
 
     if ((millis() - timer) % 10 == 0) {
       // Log the value to file
-      uint16_t optoValue = analogRead(OPTO_PIN);
+      uint16_t optoValue = analogRead(LINE_SENSOR_3);
       file.println(optoValue);
     }
   }
@@ -432,8 +390,8 @@ void TurnToAngle(uint16_t angle) {
   motorL.run(BACKWARD);
 
   while (lTicks < targetTicks || rTicks < targetTicks) {
-    r = digitalRead(R_COUNTER);
-    l = digitalRead(L_COUNTER);
+    r = digitalRead(R_ENCODER_1);
+    l = digitalRead(L_ENCODER_1);
 
     if (lTicks >= targetTicks) {
       motorL.run(RELEASE);
@@ -541,9 +499,9 @@ void MoveForward() {
   uint64_t timer = millis();
 
   while (millis() - timer < (distance * 1000)) {
-    r = digitalRead(R_COUNTER);
+    r = digitalRead(R_ENCODER_1);
     // Serial.println(r);
-    l = digitalRead(L_COUNTER);
+    l = digitalRead(L_ENCODER_1);
     // Serial.println(l);
 
     if (r != rLast) {
@@ -613,12 +571,12 @@ void CountLines() {
   uint64_t timer = millis();
 
   while (millis() - timer < (distance * 1000)) {
-    r = digitalRead(R_COUNTER);
+    r = digitalRead(R_ENCODER_1);
     // Serial.println(r);
-    l = digitalRead(L_COUNTER);
+    l = digitalRead(L_ENCODER_1);
     // Serial.println(l);
 
-    bool res = digitalRead(OPTO_PIN);
+    bool res = digitalRead(LINE_SENSOR_3);
     if (res != lineRead) {
       if (res == LOW) {
         lineCount++;
@@ -733,9 +691,9 @@ void DriveDistance(uint16_t distance, bool fwd) {
 
   while (lCounter < target && rCounter < target) {
 
-    r = digitalRead(R_COUNTER);
+    r = digitalRead(R_ENCODER_1);
     // Serial.println(r);
-    l = digitalRead(L_COUNTER);
+    l = digitalRead(L_ENCODER_1);
     // Serial.println(l);
 
     if (r != rLast) {
