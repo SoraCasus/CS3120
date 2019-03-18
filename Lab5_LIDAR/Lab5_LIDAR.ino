@@ -1,5 +1,6 @@
 #include <AFMotor.h>
 #include <LiquidCrystal_I2C.h>
+#include <Wire.h>
 #include <math.h>
 
 #define PI_32 3.141592654
@@ -24,7 +25,7 @@
 #define LINE_SENSOR_5 A5
 #define SHARP A6
 
-#define MOTOR_SPEED 150
+#define MOTOR_SPEED 200
 
 AF_DCMotor motorR(1);
 AF_DCMotor motorL(2);
@@ -41,6 +42,8 @@ void setup() {
   lcd.init();
   lcd.backlight();
 
+  Wire.begin();
+
   pinMode(R_ENCODER_1, INPUT);
   pinMode(R_ENCODER_2, INPUT);
   pinMode(L_ENCODER_1, INPUT);
@@ -56,13 +59,14 @@ void setup() {
   pinMode(SHARP, INPUT);
   pinMode(SPI_CS_PIN, INPUT);
 
+
   motorR.setSpeed(0);
   motorL.setSpeed(0);
 }
 
 void loop() {
 
-  int distance = 15;
+  int distance = 25;
   bool lastEncoder = LOW;
   while (digitalRead(ROT_ENCODER_SW) != LOW) {
     lcd.setCursor(0, 0);
@@ -74,8 +78,8 @@ void loop() {
     if (encoder != lastEncoder) {
       if (encoder == HIGH) {
         distance += 5;
-        if (distance > 60) distance = 15;
-        if (distance < 15) distance = 15;
+        if (distance > 150) distance = 150;
+        if (distance < 25) distance = 25;
 
         lastEncoder = encoder;
       }
@@ -83,28 +87,30 @@ void loop() {
     }
   }
 
-  int targetDistance = 0;
-  switch(distance) {
-    case 20 : { targetDistance = 290; } break;
-    case 25 : { targetDistance = 260; } break;
-    case 30 : { targetDistance = 230; } break;
-    case 35 : { targetDistance = 213; } break;
-    case 40 : { targetDistance = 202; } break;
-    case 45 : { targetDistance = 190; } break;
-    case 50 : { targetDistance = 180; } break;
-    case 55 : { targetDistance = 171; } break;
-    case 60 : { targetDistance = 167; } break;
-  }
+  Wire.beginTransmission(8);
+  Wire.write(lowByte(distance));
+  Wire.write(highByte(distance));
+  Serial.print(lowByte(distance));
+  Serial.print(", ");
+  Serial.print(highByte(distance));
+  Serial.print(", ");
+  Serial.println((highByte(distance) << 8) | lowByte(distance));
+  Wire.endTransmission();
 
   lcd.setCursor(0, 0);
   lcd.print("                ");
   lcd.setCursor(0, 1);
   lcd.print("                ");
 
-  motorR.setSpeed(MOTOR_SPEED);
-  motorL.setSpeed(MOTOR_SPEED);
+  motorR.setSpeed(255);
+  motorL.setSpeed(255);
   motorR.run(FORWARD);
   motorL.run(FORWARD);
+
+  delay(100);
+
+  motorR.setSpeed(MOTOR_SPEED);
+  motorL.setSpeed(MOTOR_SPEED);
 
   bool r = LOW;
   bool l = LOW;
@@ -141,23 +147,21 @@ void loop() {
       motorL.run(FORWARD);
       motorR.run(FORWARD);
     }
-
-    float dist;
     
-    int sharpReading = analogRead(SHARP);
+    Wire.requestFrom(8, 1);
+    byte targetReached = Wire.read();
 
-    if (sharpReading >= targetDistance) {
+    if (targetReached == 1) {
+      
       // Stop the robot
       motorR.run(BACKWARD);
-      motorL.run(BACKWARD);
+      //motorL.run(BACKWARD);
       long lastTime = millis();
-      while (millis() - lastTime < 200);
+      while (millis() - lastTime < 300);
       motorL.setSpeed(0);
       motorR.setSpeed(0);
       motorR.run(RELEASE);
       motorL.run(RELEASE);
-      lcd.clear();
-      lcd.print(sharpReading);
       return;
     }
 
