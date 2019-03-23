@@ -1,6 +1,7 @@
 #include <AFMotor.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
+#include <VL53L1X.h>
 #include <math.h>
 
 #define PI_32 3.141592654
@@ -25,10 +26,12 @@
 #define LINE_SENSOR_5 A5
 #define SHARP A6
 
-#define MOTOR_SPEED 200
+#define MOTOR_SPEED 120
 
 AF_DCMotor motorR(1);
 AF_DCMotor motorL(2);
+
+VL53L1X lidar;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -43,6 +46,11 @@ void setup() {
   lcd.backlight();
 
   Wire.begin();
+
+  lidar.setTimeout(500);
+  lidar.init();
+  lidar.setDistanceMode(VL53L1X::Long);
+  lidar.setMeasurementTimingBudget(50000);
 
   pinMode(R_ENCODER_1, INPUT);
   pinMode(R_ENCODER_2, INPUT);
@@ -87,16 +95,6 @@ void loop() {
     }
   }
 
-  Wire.beginTransmission(8);
-  Wire.write(lowByte(distance));
-  Wire.write(highByte(distance));
-  Serial.print(lowByte(distance));
-  Serial.print(", ");
-  Serial.print(highByte(distance));
-  Serial.print(", ");
-  Serial.println((highByte(distance) << 8) | lowByte(distance));
-  Wire.endTransmission();
-
   lcd.setCursor(0, 0);
   lcd.print("                ");
   lcd.setCursor(0, 1);
@@ -109,62 +107,37 @@ void loop() {
 
   delay(100);
 
-  motorR.setSpeed(MOTOR_SPEED);
-  motorL.setSpeed(MOTOR_SPEED);
+  motorR.setSpeed(90);
+  motorL.setSpeed(120);
 
-  bool r = LOW;
-  bool l = LOW;
-  bool rLast = LOW;
-  bool lLast = LOW;
-
-  u32 lCounter = 0;
-  u32 rCounter = 0;
+  lidar.startContinuous(50);
   while (1) {
-    r = digitalRead(R_ENCODER_1);
-    l = digitalRead(L_ENCODER_1);
+    int reading = lidar.read(true);
+    Serial.println(reading);
+    if (lidar.timeoutOccurred()) continue;
+    reading /= 10;
 
-    if (r != rLast) {
-      if (r == HIGH) {
-        rCounter++;
+    if (reading <= distance) {
+
+      reading = lidar.read();
+      reading /= 10;
+      while(reading < distance) {
+        motorR.run(BACKWARD);
+        motorL.run(BACKWARD);
+        delay(50);
+        motorR.run(RELEASE);
+        motorL.run(RELEASE);
+        delay(100);
+        reading = lidar.read();
+        reading /= 10;
       }
-      rLast = r;
-    }
-
-    if (l != lLast) {
-      if (l == HIGH) {
-        lCounter++;
-      }
-      lLast = l;
-    }
-
-    if (lCounter > rCounter) {
-      // motorL.setSpeed(0);
-      motorL.run(RELEASE);
-    } else if (rCounter > lCounter) {
-      // motorR.setSpeed(0);
-      motorR.run(RELEASE);
-    } else {
-      motorL.run(FORWARD);
-      motorR.run(FORWARD);
-    }
-    
-    Wire.requestFrom(8, 1);
-    byte targetReached = Wire.read();
-
-    if (targetReached == 1) {
       
-      // Stop the robot
-      motorR.run(BACKWARD);
-      //motorL.run(BACKWARD);
-      long lastTime = millis();
-      while (millis() - lastTime < 300);
-      motorL.setSpeed(0);
-      motorR.setSpeed(0);
-      motorR.run(RELEASE);
-      motorL.run(RELEASE);
-      return;
+      break;
     }
-
-
   }
+
+  while (1) {
+    Serial.println(lidar.read(true));
+  }
+  lidar.stopContinuous();
 }

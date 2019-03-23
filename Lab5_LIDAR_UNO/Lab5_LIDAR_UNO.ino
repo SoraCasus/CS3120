@@ -7,6 +7,7 @@ int targetDistance = 5000;
 byte targetReached = 0;
 
 void setup() {
+  
   Wire.begin(8);
 
   Wire.onReceive(ReceiveEvent);
