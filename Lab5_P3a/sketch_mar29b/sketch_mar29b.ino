@@ -12,10 +12,8 @@
 #define PI_32 3.141592654
 
 #define SONAR 6
-#define R_ENCODER_1 14
-#define R_ENCODER_2 15
-#define L_ENCODER_1 16
-#define L_ENCODER_2 17
+#define R_COUNTER_1 18
+#define L_COUNTER_1 19
 #define I2C_PIN_SDA 20
 #define I2C_PIN_SCL 21
 #define ROT_ENCODER_CLK 46
@@ -30,9 +28,8 @@
 #define LINE_SENSOR_5 A5
 #define SHARP A6
 
-#define L_COUNTER 24
-#define R_COUNTER 25
-
+int lCounter = 0;
+int rCounter = 0;
 
 AF_DCMotor motorR(1);
 AF_DCMotor motorL(2);
@@ -61,10 +58,8 @@ void setup() {
   lidar.setDistanceMode(VL53L1X::Long);
   lidar.setMeasurementTimingBudget(50000);
 
-  pinMode(R_ENCODER_1, INPUT);
-  pinMode(R_ENCODER_2, INPUT);
-  pinMode(L_ENCODER_1, INPUT);
-  pinMode(L_ENCODER_2, INPUT);
+  pinMode(R_COUNTER_1, INPUT);
+  pinMode(L_COUNTER_1, INPUT);
   pinMode(ROT_ENCODER_CLK, INPUT);
   pinMode(ROT_ENCODER_SW, INPUT);
   pinMode(ROT_ENCODER_DT, INPUT);
@@ -76,28 +71,68 @@ void setup() {
   pinMode(SHARP, INPUT);
   pinMode(SPI_CS_PIN, INPUT);
 
-  // lidar.startContinuous(20);
+  attachInterrupt(digitalPinToInterrupt(L_COUNTER_1), LeftInterrupt, RISING);
+  attachInterrupt(digitalPinToInterrupt(R_COUNTER_1), RightInterrupt, RISING);
 
-  motorR.setSpeed(85);
-  motorL.setSpeed(108);
+  motorR.setSpeed(110);
+  motorL.setSpeed(110);
 
+}
+
+void LeftInterrupt() {
+  lCounter++;
+}
+void RightInterrupt() {
+  rCounter++;
+}
+
+void goStraight() {
+  
+    if (lCounter > rCounter) {
+      motorL.run(RELEASE);
+    } else if (rCounter > lCounter) {
+      motorR.run(RELEASE);
+    } else {
+      motorL.run(FORWARD);
+      motorR.run(FORWARD);
+    }
+
+}
+  
+
+void noDelay(int x){
+  long lasttime = millis();
+  while(millis() - lasttime < x) goStraight(); 
+}
+
+void noMove(int x){
+  long lasttime = millis();
+  while(millis() - lasttime < x) ;
 }
 
 void stopAt() {
 
-  motorR.setSpeed(85);
-  motorL.setSpeed(105);
+  motorR.setSpeed(110);
+  motorL.setSpeed(110);
 
-  delay(1000);
-  int distance = 500;
+  noMove(1000);
+  int distance = 499;
+  
+  lCounter = 0;
+  rCounter = 0;
 
-  Serial.println("Entered StopAt");
+  motorR.run(FORWARD);
+  motorL.run(FORWARD);
 
-  lidar.startContinuous(50);
+  goStraight();
+
+  lidar.startContinuous(100);
   while (1) {
 
+    goStraight();
+
     int reading = lidar.read(true);
-    Serial.println(reading);
+    
     if (lidar.timeoutOccurred()) continue;
 
     if (reading < distance) {
@@ -110,13 +145,12 @@ void stopAt() {
       while (reading < distance) {
         motorR.run(BACKWARD);
         motorL.run(BACKWARD);
-        delay(50);
+        noMove(50);
         motorR.run(RELEASE);
         motorL.run(RELEASE);
-        delay(100);
+        noMove(100);
         reading = lidar.read();
       }
-      // lidar.stopContinuous();
       while (1);
     }
 
@@ -125,38 +159,35 @@ void stopAt() {
 
 }
 
-void turn() {
-  // turns robot 90 degrees.\
-
-  motorR.setSpeed(85);
-  motorL.setSpeed(110);
-
-  delay(1000);
-
-  motorR.run(BACKWARD);
-  motorL.run(FORWARD);
-  delay(820);
-  motorR.run(RELEASE);
-  motorL.run(RELEASE);
-  delay(400);
-}
-
 void needToTurn() {
 
   motorR.run(BACKWARD);
   motorL.run(BACKWARD);
 
-  delay(100);
+  noMove(90);
 
   motorR.run(RELEASE);
   motorL.run(RELEASE);
 
-  turn();
+  motorR.setSpeed(110);
+  motorL.setSpeed(110);
+
+  noMove(1000);
+
+  motorR.run(BACKWARD);
+  motorL.run(FORWARD);
+
+  noMove(620); 
+
+  motorR.run(RELEASE);
+  motorL.run(RELEASE);
+  noMove(1000);
 
   motorR.run(FORWARD);
   motorL.run(FORWARD);
 
   stopAt();
+
 }
 
 long getCm() {
@@ -187,19 +218,16 @@ void loop() {
   motorR.run(FORWARD);
   motorL.run(FORWARD);
 
-  //goStraight();
+  goStraight();
 
   cm = getCm();
 
-  //Serial.println(cm);
   if (cm <= 149 && cm > 10 ) {
-    delay(420);
+    noDelay(750);
     cm = getCm();
-    //Serial.println(cm);
     if (cm <= 149) {
-      delay(420);
+      noDelay(750);
       cm = getCm();
-      //Serial.println(cm);
       if (cm <= 149) {
         needToTurn();
       }
@@ -207,11 +235,16 @@ void loop() {
 
   }
 
+  goStraight();
+
+  lidar.startContinuous(100);
   int reading = lidar.read(true);
   if (lidar.timeoutOccurred()) return;
 
   if (reading < distance) {
     stopAt();
   }
+
+  lidar.stopContinuous();
 
 }
