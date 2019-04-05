@@ -1,3 +1,6 @@
+
+
+
 #include <AFMotor.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
@@ -100,24 +103,28 @@ void loop() {
   lcd.setCursor(0, 1);
   lcd.print("                ");
 
-  motorR.setSpeed(255);
-  motorL.setSpeed(255);
+  delay(100);
+
+  motorR.setSpeed(95);
+  motorL.setSpeed(120);
   motorR.run(FORWARD);
   motorL.run(FORWARD);
 
-  delay(100);
-
-  motorR.setSpeed(90);
-  motorL.setSpeed(120);
-
-  lidar.startContinuous(50);
+  lidar.startContinuous(20);
   while (1) {
+    
     int reading = lidar.read(true);
-    Serial.println(reading);
+    //Serial.println(reading);
     if (lidar.timeoutOccurred()) continue;
-    reading /= 10;
+    //reading /= 10;
 
-    if (reading <= distance) {
+    if (reading < distance*10) {
+
+      motorR.run(BACKWARD);
+      motorL.run(BACKWARD);
+      
+      motorR.setSpeed(100);
+      motorL.setSpeed(120);
 
       reading = lidar.read();
       reading /= 10;
@@ -137,7 +144,7 @@ void loop() {
   }
 
   while (1) {
-    Serial.println(lidar.read(true));
+    //Serial.println(lidar.read(true));
   }
   lidar.stopContinuous();
 }

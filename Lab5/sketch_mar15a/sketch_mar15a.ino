@@ -106,13 +106,6 @@ void loop() {
   motorR.run(FORWARD);
   motorL.run(FORWARD);
 
-  bool r = LOW;
-  bool l = LOW;
-  bool rLast = LOW;
-  bool lLast = LOW;
-
-  u32 lCounter = 0;
-  u32 rCounter = 0;
   while (1) {
     r = digitalRead(R_ENCODER_1);
     l = digitalRead(L_ENCODER_1);
