@@ -21,7 +21,6 @@
 #define ROT_ENCODER_SW 47
 #define ROT_ENCODER_DT 48
 #define SPI_CS_PIN 53
-#define POT_PIN A0
 #define LINE_SENSOR_1 A1
 #define LINE_SENSOR_2 A2
 #define LINE_SENSOR_3 A3
