@@ -1,5 +1,6 @@
-#include <AF_Motor.h>
+#include <AFMotor.h>
 #include <VL53L1X.h>
+#include <LiquidCrystal_I2C.h>
 
 #define R_ENCODER_1 14
 #define L_ENCODER_1 16
@@ -12,6 +13,12 @@
 
 #define MOTOR_SPEED 150
 
+typedef struct pose {
+  int x;
+  int y;
+  float angle;
+} pose_t;
+
 AF_DCMotor motorR(1);
 AF_DCMotor motorL(2);
 
@@ -19,9 +26,7 @@ VL53L1X lidar;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-int currentX;
-int currentY;
-float currentAngle;
+pose_t currentPose;
 int index;
 
 void setup() {
@@ -45,9 +50,9 @@ void setup() {
 
   lcd.clear();
 
-  currentX = 0;
-  currentY = 0;
-  currentAngle = 0;
+  currentPose.x = 0;
+  curentPose.y = 0;
+  currentPose.angle = 0;
   index = 0;
 
   motorR.setSpeed(MOTOR_SPEED);
@@ -59,9 +64,9 @@ void loop() {
   int x = 0;
   int y = 0;
   bool lastEncoder = LOW;
-  
+
   // Get the X coord
-  while(digitalRead(ROT_ENCODER_SW) != LOW) {
+  while (digitalRead(ROT_ENCODER_SW) != LOW) {
     lcd.setCursor(0, 0);
     lcd.print("X: ");
     lcd.print(x);
@@ -71,11 +76,11 @@ void loop() {
     lcd.print(y);
     lcd.print("    ");
 
-    bool encoder = digitalRead(ROT_ENCODER_DT));
-    if(encoder != lastEncoder) {
-      if(encoder == HIGH) {
+    bool encoder = digitalRead(ROT_ENCODER_DT);
+    if (encoder != lastEncoder) {
+      if (encoder == HIGH) {
         x++;
-        if(x > 200)
+        if (x > 200)
           x = 0;
       }
       lastEncoder = encoder;
@@ -83,10 +88,10 @@ void loop() {
   }
 
   // Make sure it doesn't register as a double click
-  while(digitalRead(ROT_ENCODER_SW) == LOW);
+  while (digitalRead(ROT_ENCODER_SW) == LOW);
 
   // Get the Y coord
-  while(digitalRead(ROT_ENCODER_SW) != LOW) {
+  while (digitalRead(ROT_ENCODER_SW) != LOW) {
     lcd.setCursor(0, 0);
     lcd.print("X: ");
     lcd.print(x);
@@ -96,43 +101,44 @@ void loop() {
     lcd.print(y);
     lcd.print("    ");
 
-    bool encoder = digitalRead(ROT_ENCODER_DT));
-    if(encoder != lastEncoder) {
-      if(encoder == HIGH) {
+    bool encoder = digitalRead(ROT_ENCODER_DT);
+    if (encoder != lastEncoder) {
+      if (encoder == HIGH) {
         y++;
-        if(y > 200)
+        if (y > 200)
           y = 0;
       }
       lastEncoder = encoder;
     }
   }
 
-  
-  float dx = x - currentX;
-  float dy = y - currentY;
+
+  float dx = x - currentPose.x;
+  float dy = y - currentPose.y;
 
   GoToloc(dx, dy);
 
-  currentX = x;
-  currentY = y;
+  currentPose.x = x;
+  currentPose.y = y;
 
   index++;
-  
-  if(index == 3) {
-    GoToloc(-currentX, -currentY);
-    while(1);
+
+  if (index == 3) {
+    GoToloc(-currentPose.x, -currentPose.y);
+    while (1);
   }
-  
+
 }
 
 
 void GoToloc(uint16_t dx, uint16_t dy) {
   // once the required changes are made this function will work, till then nothing
-  double angleR = atan(dy / dx);             // returns angle in radians
-  uint16_t angle = angleR * 180 / PI_32;   // returns angle in degrees
+  double angleR = atan2(dy, dx);             // returns angle in radians
+  uint16_t angle = angleR * 180 / 3.1415926536 ;   // returns angle in degrees
 
   // Calculate the difference between current angle and target angle
-  angle -= currentAngle;
+  angle -= currentPose.angle;
+  currentPose.angle += angle;
 
   uint16_t distance = sqrt((dy * dy) + (dx * dx));
 
@@ -145,11 +151,11 @@ void GoToloc(uint16_t dx, uint16_t dy) {
 }
 
 /**
- * Converts a given angle (in degrees) to the number of motor
- * ticks needed to rotate to the given angle
- */
+   Converts a given angle (in degrees) to the number of motor
+   ticks needed to rotate to the given angle
+*/
 uint32_t AngleToTicks(uint16_t angle) {
-  double distance = PI_32 * 2 * 16.7 * (double)angle;
+  double distance = 3.1415926536 * 2 * 16.7 * (double)angle;
   distance /= 360;
   double N = 1.04 + (5.56e-3 * angle) + (-1.11e-5 * angle * angle);
 
@@ -178,11 +184,20 @@ void TurnToAngle(uint16_t angle) {
   bool l = LOW;
   bool lLast = LOW;
 
-  motorR.setSpeed(150);
-  motorR.run(FORWARD);
-  motorL.setSpeed(150);
-  motorL.run(BACKWARD);
-
+  bool positive = angle > 0;
+  if (positive) {
+    motorR.setSpeed(150);
+    motorR.run(FORWARD);
+    motorL.setSpeed(150);
+    motorL.run(BACKWARD);
+  } else {
+    angle *= -1;
+    motorR.setSpeed(150);
+    motorR.run(BACKWARD);
+    motorL.setSpeed(150);
+    motorL.run(FORWARD);
+    
+  }
   while (lTicks < targetTicks || rTicks < targetTicks) {
     r = digitalRead(R_ENCODER_1);
     l = digitalRead(L_ENCODER_1);
